@@ -1,0 +1,5 @@
+Python 3.9.15
+pip install opencv-python
+pip install PyOpenGL PyOpenGL_acceleration
+pip install imgui[full]
+pip install pyrr
