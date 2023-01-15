@@ -18,25 +18,39 @@ class ConvertModel(gfx.Base):
         self.desired_width = 1024
         self.desired_height = 768
 
-        self.shader = -1
-        self.pos_attr = -1
-        self.uv_attr = -1
-        self.nrm_attr = -1
-        self.proj_uform = -1
-        self.model_uform = -1
-        self.col_uform = -1
-        self.bkg_uform = -1
-        self.fresnel_uform = -1
+        self.tumour_shader = None
+        self.instrument_shader = None
+        self.liver_shader = None
         self.ui_clear_color = .0, .0, .3, 1.
-        self.ui_shader_color = 1.0, 1.0, 1.0, 1.0
-        self.ui_bias = 0.0
-        self.ui_scale = 1.0
-        self.ui_power = 2.5
-        self.ui_bkg_term = 0.3
-        self.fresnel = [self.ui_bias, self.ui_scale, self.ui_power, self.ui_bkg_term]
+
+        self.ui_tumour_color = 1.0, 1.0, 1.0, 1.0
+        self.ui_tumour_bias = 0.0
+        self.ui_tumour_scale = 1.0
+        self.ui_tumour_power = 2.5
+        self.ui_tumour_bkg_term = 0.3
+        self.tumour_fresnel = [self.ui_tumour_bias, self.ui_tumour_scale, self.ui_tumour_power, self.ui_tumour_bkg_term]
+
+        self.ui_liver_visible = True
+        self.ui_liver_color = 1.0, 1.0, 1.0, 1.0
+        self.ui_liver_bias = 0.0
+        self.ui_liver_scale = 1.0
+        self.ui_liver_power = 2.5
+        self.ui_liver_bkg_term = 0.3
+        self.liver_fresnel = [self.ui_liver_bias, self.ui_liver_scale, self.ui_liver_power, self.ui_liver_bkg_term]
+
+        self.ui_instrument_visible = True
+        self.ui_instrument_color = 1.0, 1.0, 1.0, 1.0
+        self.ui_instrument_bias = 0.0
+        self.ui_instrument_scale = 1.0
+        self.ui_instrument_power = 2.5
+        self.ui_instrument_bkg_term = 0.3
+        self.instrument_fresnel = [self.ui_instrument_bias, self.ui_instrument_scale, self.ui_instrument_power, self.ui_instrument_bkg_term]
+
         self.ui_display_menu = False
-        self.num_vertices = 0
-        self.geom = None
+        self.tumour = None
+        self.tumour_center = np.array([0, 0, 0])
+        self.liver = None
+        self.instrument = None
         self.text = str()
         self.ident = np.zeros([1, 16], dtype = np.float32).flatten()
         self.ident[0] = np.float32(1.0)
@@ -50,9 +64,7 @@ class ConvertModel(gfx.Base):
         self.camera_angle_up = 0.
         self.camera_angle_side = 0.
         self.camera_eye = self.calc_eye()
-        #self.camera_eye = np.array([4, 3, 3])
         self.camera_lookat = np.array([0, 0, 0])
-        #self.camera_lookat = np.array([1, 1, 0])
         self.camera_up = np.array([0, 1, 0])
         self.camera_fovy = 45.0
         self.camera_z_near = 0.1
@@ -70,19 +82,36 @@ class ConvertModel(gfx.Base):
             with open("Settings.txt", "r") as fp:
                 lines = fp.readlines()
                 fp.close()
-            if len(lines) != 12:
+            if len(lines) < 28:
                 raise Exception("Too few lines")
             r, g, b, a = float(lines[0]), float(lines[1]), float(lines[2]), float(lines[3])
             self.ui_clear_color = [r, g, b, a]
             r, g, b, a = float(lines[4]), float(lines[5]), float(lines[6]), float(lines[7])
-            self.ui_shader_color = [r, g, b, a]
-
+            self.ui_tumour_color = [r, g, b, a]
             r, g, b, a = float(lines[8]), float(lines[9]), float(lines[10]), float(lines[11])
-            self.fresnel = [r, g, b, a]
-            self.ui_bias = r
-            self.ui_scale = g
-            self.ui_power = b
-            self.ui_bkg_term = a
+            self.tumour_fresnel = [r, g, b, a]
+            self.ui_tumour_bias = r
+            self.ui_tumour_scale = g
+            self.ui_tumour_power = b
+            self.ui_tumour_bkg_term = a
+
+            r, g, b, a = float(lines[12]), float(lines[13]), float(lines[14]), float(lines[15])
+            self.ui_liver_color = [r, g, b, a]
+            r, g, b, a = float(lines[16]), float(lines[17]), float(lines[18]), float(lines[19])
+            self.liver_fresnel = [r, g, b, a]
+            self.ui_liver_bias = r
+            self.ui_liver_scale = g
+            self.ui_liver_power = b
+            self.ui_liver_bkg_term = a
+
+            r, g, b, a = float(lines[20]), float(lines[21]), float(lines[22]), float(lines[23])
+            self.ui_instrument_color = [r, g, b, a]
+            r, g, b, a = float(lines[24]), float(lines[25]), float(lines[26]), float(lines[27])
+            self.instrument_fresnel = [r, g, b, a]
+            self.ui_instrument_bias = r
+            self.ui_instrument_scale = g
+            self.ui_instrument_power = b
+            self.ui_instrument_bkg_term = a
         except Exception as e:
             print(e)
             pass
@@ -94,15 +123,35 @@ class ConvertModel(gfx.Base):
             fp.write(f"{self.ui_clear_color[2]}\n")
             fp.write(f"{self.ui_clear_color[3]}\n")
 
-            fp.write(f"{self.ui_shader_color[0]}\n")
-            fp.write(f"{self.ui_shader_color[1]}\n")
-            fp.write(f"{self.ui_shader_color[2]}\n")
-            fp.write(f"{self.ui_shader_color[3]}\n")
+            fp.write(f"{self.ui_tumour_color[0]}\n")
+            fp.write(f"{self.ui_tumour_color[1]}\n")
+            fp.write(f"{self.ui_tumour_color[2]}\n")
+            fp.write(f"{self.ui_tumour_color[3]}\n")
 
-            fp.write(f"{self.fresnel[0]}\n")
-            fp.write(f"{self.fresnel[1]}\n")
-            fp.write(f"{self.fresnel[2]}\n")
-            fp.write(f"{self.fresnel[3]}\n")
+            fp.write(f"{self.tumour_fresnel[0]}\n")
+            fp.write(f"{self.tumour_fresnel[1]}\n")
+            fp.write(f"{self.tumour_fresnel[2]}\n")
+            fp.write(f"{self.tumour_fresnel[3]}\n")
+
+            fp.write(f"{self.ui_liver_color[0]}\n")
+            fp.write(f"{self.ui_liver_color[1]}\n")
+            fp.write(f"{self.ui_liver_color[2]}\n")
+            fp.write(f"{self.ui_liver_color[3]}\n")
+
+            fp.write(f"{self.liver_fresnel[0]}\n")
+            fp.write(f"{self.liver_fresnel[1]}\n")
+            fp.write(f"{self.liver_fresnel[2]}\n")
+            fp.write(f"{self.liver_fresnel[3]}\n")
+
+            fp.write(f"{self.ui_instrument_color[0]}\n")
+            fp.write(f"{self.ui_instrument_color[1]}\n")
+            fp.write(f"{self.ui_instrument_color[2]}\n")
+            fp.write(f"{self.ui_instrument_color[3]}\n")
+
+            fp.write(f"{self.instrument_fresnel[0]}\n")
+            fp.write(f"{self.instrument_fresnel[1]}\n")
+            fp.write(f"{self.instrument_fresnel[2]}\n")
+            fp.write(f"{self.instrument_fresnel[3]}\n")
             fp.close()
 
     def calc_trf(self):
@@ -121,12 +170,8 @@ class ConvertModel(gfx.Base):
         up = M @ pyrr.Vector3([0.,1.,0.])
         return np.array(eye), np.array(up)
 
-    def setup(self, window, w, h):
-        if not super().setup(window, w, h):
-            return False
 
-        self.aspect = w / h
-        model_filename = 'fake_tumour.obj'
+    def load_obj(self, model_filename):
         scene = None
         try:
             scene = op.ObjParse(filename=model_filename, verbose=False)
@@ -139,40 +184,31 @@ class ConvertModel(gfx.Base):
             print(f"ERROR: Unable to parse {model_filename}")
             return False
 
-        self.shader, self.pos_attr, self.uv_attr, self.nrm_attr, self.proj_uform, self.model_uform, self.col_uform, self.bkg_uform, self.fresnel_uform = color_shader.create()
-
-        self.geom = conv.convert_tris(scene)
+        geom = conv.convert_tris(scene)
         # convert positions to 32bit float
-        self.geom.vertex_data = np.array(self.geom.vertex_data, dtype = np.float32)
+        geom.vertex_data = np.array(geom.vertex_data, dtype = np.float32)
 
-        self.num_vertices = self.geom.count_verts()
-        vertex_attrib_bytes = self.geom.count_attrib_bytes()
-        num_array_bytes = self.geom.count_bytes()
+        geom_center = geom.calc_center()
+        return geom, geom_center
 
-        # Create buffer object
-        self.vertex_buffer_object = glGenBuffers(1) 
 
-        # Bind the buffer and setup the attrib arrays
+    def setup(self, window, w, h):
+        if not super().setup(window, w, h):
+            return False
 
-        glBindBuffer(GL_ARRAY_BUFFER, self.vertex_buffer_object)
-        glBufferData(GL_ARRAY_BUFFER, num_array_bytes, self.geom.vertex_data, GL_STATIC_DRAW)
+        self.aspect = w / h
+        self.tumour, self.tumour_center = self.load_obj('fake_tumour.obj')
+        self.liver, test4 = self.load_obj('fake_liver.obj')
+        self.instrument, test2 = self.load_obj('fake_instrument.obj')
 
-        glVertexAttribPointer(self.pos_attr, 3, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, None)
-        glEnableVertexAttribArray(self.pos_attr)
-        skip_bytes = 3 * 4
+        self.tumour_shader = color_shader.create()
+        self.tumour.create_geom(self.tumour_shader.pos_attrib, self.tumour_shader.uv_attrib, self.tumour_shader.nrm_attrib)
 
-        if self.geom.has_uv:
-            glVertexAttribPointer(self.uv_attr, 2, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, ctypes.c_void_p(skip_bytes))
-            glEnableVertexAttribArray(self.uv_attr)
-            skip_bytes += 2 * 4
+        self.liver_shader = color_shader.create()
+        self.liver.create_geom(self.liver_shader.pos_attrib, self.liver_shader.uv_attrib, self.liver_shader.nrm_attrib)
 
-        if self.geom.has_nrm:
-            glVertexAttribPointer(self.nrm_attr, 3, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, ctypes.c_void_p(skip_bytes))
-            glEnableVertexAttribArray(self.nrm_attr)
-            skip_bytes += 3 * 4
-
-        glUseProgram(self.shader) # This activates the shader
-        #glUseProgram(0) # This can be used to disable the shader (when desired)
+        self.instrument_shader = color_shader.create()
+        self.instrument.create_geom(self.instrument_shader.pos_attrib, self.instrument_shader.uv_attrib, self.instrument_shader.nrm_attrib)
 
         # enable rendering to be transparent
         glEnable(GL_BLEND)
@@ -188,7 +224,13 @@ class ConvertModel(gfx.Base):
 
     def finish(self):
         # cleanup here
-        glDeleteBuffers(1, [self.vertex_buffer_object])
+        self.tumour.destroy()
+        self.instrument.destroy()
+        self.liver.destroy()
+
+        self.tumour_shader.destroy()
+        self.instrument_shader.destroy()
+        self.liver_shader.destroy()
         super().finish() # call this at the last step here
 
 
@@ -200,6 +242,16 @@ class ConvertModel(gfx.Base):
     def mouse_enter(self, enter):
         pass #print(f"{enter}")
 
+    def clamp_camera_values(self):
+        if (self.camera_angle_side > 90):
+            self.camera_angle_side = 90
+        if (self.camera_angle_side < -90):
+            self.camera_angle_side = -90
+        if self.camera_distance < 1:
+            self.camera_distance = 1
+        if self.camera_distance > 15:
+            self.camera_distance = 15
+
     def mouse_move(self, xpos, ypos):
         scale_dx = 1.
         scale_dy = 1.
@@ -208,32 +260,20 @@ class ConvertModel(gfx.Base):
             dy = ypos - self.mouse_y
             self.camera_angle_up = self.camera_angle_up + dx * scale_dx
             self.camera_angle_side = self.camera_angle_side + dy * scale_dy
-            if (self.camera_angle_side > 90):
-                self.camera_angle_side = 90
-            if (self.camera_angle_side < -90):
-                self.camera_angle_side = -90
+            self.clamp_camera_values()
         if self.zoom_mode:
             dy = ypos - self.mouse_y
             self.camera_distance = self.camera_distance + dy * 0.01
-            if self.camera_distance < 1:
-                self.camera_distance = 1
-            if self.camera_distance > 10:
-                self.camera_distance = 10
+            self.clamp_camera_values()
         self.mouse_x = xpos
         self.mouse_y = ypos
-        pass #print(f"{xpos}  {ypos}")
 
     def mouse_scroll(self, x, y):
         if y < 0.:
             self.camera_distance = self.camera_distance * 1.1
         elif y > 0:
             self.camera_distance = self.camera_distance / 1.1
-
-        if self.camera_distance < 1:
-            self.camera_distance = 1
-        if self.camera_distance > 10:
-            self.camera_distance = 10
-        pass #print(f"{x}  {y}")
+        self.clamp_camera_values()
 
     def mouse_button(self, button, action, mods):
         if action == glfw.PRESS and button == glfw.MOUSE_BUTTON_1:
@@ -246,8 +286,6 @@ class ConvertModel(gfx.Base):
         if action == glfw.RELEASE and button == glfw.MOUSE_BUTTON_2:
             self.zoom_mode = False
 
-        pass #print(f"{button}, {action}, {mods}")
-
     def resize(self, w, h):
         super().resize(w, h)
         glViewport(0,0, w, h)
@@ -255,6 +293,8 @@ class ConvertModel(gfx.Base):
 
     def update(self, T):
         self.camera_eye, self.camera_up = self.calc_eye()
+        self.camera_eye += self.tumour_center
+        self.camera_lookat = self.tumour_center
         #print(f"{self.camera_eye}    {self.camera_angle_z}")
         self.Mmodel = pyrr.matrix44.create_look_at(self.camera_eye, self.camera_lookat, self.camera_up)
         self.Mproj = pyrr.matrix44.create_perspective_projection_matrix(self.camera_fovy, self.aspect, self.camera_z_near, self.camera_z_far)
@@ -264,21 +304,97 @@ class ConvertModel(gfx.Base):
         imgui.begin("Sample User Interface") # new window
 
         # draw color pickers for background and shader color
-        changed, self.ui_clear_color = imgui.color_edit4("Clear Color", *self.ui_clear_color)
-        changed, self.ui_shader_color = imgui.color_edit4("Tumour Color", *self.ui_shader_color)
-        changed, self.ui_bias = imgui.slider_float('Fresnel Bias', self.ui_bias,-1., 1., '%.2f', 1.0)
-        if changed:
-            self.fresnel = [self.ui_bias, self.ui_scale, self.ui_power, self.ui_bkg_term]
-        changed, self.ui_scale = imgui.slider_float('Fresnel Scale', self.ui_scale, -1., 1., '%.2f', 1.0)
-        if changed:
-            self.fresnel = [self.ui_bias, self.ui_scale, self.ui_power, self.ui_bkg_term]
-        changed, self.ui_power = imgui.slider_float('Fresnel Power', self.ui_power, 0.0, 4.0, '%.2f', 1.0)
-        if changed:
-            self.fresnel = [self.ui_bias, self.ui_scale, self.ui_power, self.ui_bkg_term]
+        imgui.text("Clear   : ")
+        imgui.same_line()
+        changed, self.ui_clear_color = imgui.color_edit4("##Clear_Color", *self.ui_clear_color)
 
-        changed, self.ui_bkg_term = imgui.slider_float('Background Visibility', self.ui_bkg_term, 0.0, 1.0, '%.2f', 1.0)
-        if changed:
-            self.fresnel = [self.ui_bias, self.ui_scale, self.ui_power, self.ui_bkg_term]
+        opened, _ = imgui.collapsing_header("Tumour")
+        if opened:
+            imgui.text("Color   : ")
+            imgui.same_line()
+            changed, self.ui_tumour_color = imgui.color_edit4("##Tumour_Color", *self.ui_tumour_color)
+            imgui.text("Bias    : ")
+            imgui.same_line()
+            changed, self.ui_tumour_bias = imgui.slider_float('##Tumour_Bias', self.ui_tumour_bias,-1., 1., '%.2f', 1.0)
+            if changed:
+                self.tumour_fresnel = [self.ui_tumour_bias, self.ui_tumour_scale, self.ui_tumour_power, self.ui_tumour_bkg_term]
+            imgui.text("Scale   : ")
+            imgui.same_line()
+            changed, self.ui_tumour_scale = imgui.slider_float('##Tumour_Scale', self.ui_tumour_scale, -1., 1., '%.2f', 1.0)
+            if changed:
+                self.tumour_fresnel = [self.ui_tumour_bias, self.ui_tumour_scale, self.ui_tumour_power, self.ui_tumour_bkg_term]
+            imgui.text("Power   : ")
+            imgui.same_line()
+            changed, self.ui_tumour_power = imgui.slider_float('##Tumour_Power', self.ui_tumour_power, 0.0, 4.0, '%.2f', 1.0)
+            if changed:
+                self.tumour_fresnel = [self.ui_tumour_bias, self.ui_tumour_scale, self.ui_tumour_power, self.ui_tumour_bkg_term]
+            imgui.text("Backside: ")
+            imgui.same_line()
+            changed, self.ui_tumour_bkg_term = imgui.slider_float('##Tumour_Backside', self.ui_tumour_bkg_term, 0.0, 1.0, '%.2f', 1.0)
+            if changed:
+                self.tumour_fresnel = [self.ui_tumour_bias, self.ui_tumour_scale, self.ui_tumour_power, self.ui_tumour_bkg_term]
+        opened, _ = imgui.collapsing_header("Liver")
+        if opened:
+            imgui.text("Visible : ")
+            imgui.same_line()
+            changed, state = imgui.checkbox("##Liver_Visible", self.ui_liver_visible)
+            if changed:
+                self.ui_liver_visible = state
+            imgui.text("Color   : ")
+            imgui.same_line()
+            changed, self.ui_liver_color = imgui.color_edit4("##Liver_Color", *self.ui_liver_color)
+            imgui.text("Bias    : ")
+            imgui.same_line()
+            changed, self.ui_liver_bias = imgui.slider_float('##Liver_Bias', self.ui_liver_bias,-1., 1., '%.2f', 1.0)
+            if changed:
+                self.liver_fresnel = [self.ui_liver_bias, self.ui_liver_scale, self.ui_liver_power, self.ui_liver_bkg_term]
+            imgui.text("Scale   : ")
+            imgui.same_line()
+            changed, self.ui_liver_scale = imgui.slider_float('##Liver_Scale', self.ui_liver_scale, -1., 1., '%.2f', 1.0)
+            if changed:
+                self.liver_fresnel = [self.ui_liver_bias, self.ui_liver_scale, self.ui_liver_power, self.ui_liver_bkg_term]
+            imgui.text("Power   : ")
+            imgui.same_line()
+            changed, self.ui_liver_power = imgui.slider_float('##Liver_Power', self.ui_liver_power, 0.0, 4.0, '%.2f', 1.0)
+            if changed:
+                self.liver_fresnel = [self.ui_liver_bias, self.ui_liver_scale, self.ui_liver_power, self.ui_liver_bkg_term]
+            imgui.text("Backside: ")
+            imgui.same_line()
+            changed, self.ui_liver_bkg_term = imgui.slider_float('##Liver_Backside', self.ui_liver_bkg_term, 0.0, 1.0, '%.2f', 1.0)
+            if changed:
+                self.liver_fresnel = [self.ui_liver_bias, self.ui_liver_scale, self.ui_liver_power, self.ui_liver_bkg_term]
+
+        opened, _ = imgui.collapsing_header("Instrument")
+        if opened:
+            imgui.text("Visible : ")
+            imgui.same_line()
+            changed, state = imgui.checkbox("##Instrument_Visible", self.ui_instrument_visible)
+            if changed:
+                self.ui_instrument_visible = state
+            imgui.text("Color   : ")
+            imgui.same_line()
+            changed, self.ui_instrument_color = imgui.color_edit4("##Instrument_Color", *self.ui_instrument_color)
+            imgui.text("Bias    : ")
+            imgui.same_line()
+            changed, self.ui_instrument_bias = imgui.slider_float('##Instrument_Bias', self.ui_instrument_bias,-1., 1., '%.2f', 1.0)
+            if changed:
+                self.instrument_fresnel = [self.ui_instrument_bias, self.ui_instrument_scale, self.ui_instrument_power, self.ui_instrument_bkg_term]
+            imgui.text("Scale   : ")
+            imgui.same_line()
+            changed, self.ui_instrument_scale = imgui.slider_float('##Instrument_Scale', self.ui_instrument_scale, -1., 1., '%.2f', 1.0)
+            if changed:
+                self.instrument_fresnel = [self.ui_instrument_bias, self.ui_instrument_scale, self.ui_instrument_power, self.ui_instrument_bkg_term]
+            imgui.text("Power   : ")
+            imgui.same_line()
+            changed, self.ui_instrument_power = imgui.slider_float('##Instrument_Power', self.ui_instrument_power, 0.0, 4.0, '%.2f', 1.0)
+            if changed:
+                self.instrument_fresnel = [self.ui_instrument_bias, self.ui_instrument_scale, self.ui_instrument_power, self.ui_instrument_bkg_term]
+            imgui.text("Backside: ")
+            imgui.same_line()
+            changed, self.ui_instrument_bkg_term = imgui.slider_float('##Instrument_Backside', self.ui_instrument_bkg_term, 0.0, 1.0, '%.2f', 1.0)
+            if changed:
+                self.instrument_fresnel = [self.ui_instrument_bias, self.ui_instrument_scale, self.ui_instrument_power, self.ui_instrument_bkg_term]
+
 
         #changed, self.text = imgui.input_text( "text test", self.text, 256, imgui.INPUT_TEXT_ENTER_RETURNS_TRUE)
 
@@ -294,20 +410,31 @@ class ConvertModel(gfx.Base):
     def draw(self, T):
         glClearColor(self.ui_clear_color[0],self.ui_clear_color[1],self.ui_clear_color[2],self.ui_clear_color[3])
 
-        glUseProgram(self.shader) # This activates the shader
-        glUniformMatrix4fv(self.proj_uform, 1, GL_FALSE, self.Mproj)
-        glUniformMatrix4fv(self.model_uform, 1, GL_FALSE, self.Mmodel)
-        glUniform4fv(self.col_uform, 1, [self.ui_shader_color]) # update the shader color
-        glUniform4fv(self.bkg_uform, 1, [self.ui_clear_color]) # update the shader color
-        glUniform4fv(self.fresnel_uform, 1, [self.fresnel]) # update the shader color
-
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
-        # draw the triangle
+        # draw the tumour
+        self.tumour_shader.run(self.Mproj, self.Mmodel, self.ui_tumour_color, self.ui_clear_color, self.tumour_fresnel)
+        self.tumour.use()
         glCullFace(GL_FRONT)
-        glDrawArrays(GL_TRIANGLES, 0, self.num_vertices)
+        glDrawArrays(GL_TRIANGLES, 0, self.tumour.count_verts())
         glCullFace(GL_BACK)
-        glDrawArrays(GL_TRIANGLES, 0, self.num_vertices)
+        glDrawArrays(GL_TRIANGLES, 0, self.tumour.count_verts())
+
+        if self.ui_liver_visible:
+            self.liver_shader.run(self.Mproj, self.Mmodel, self.ui_liver_color, self.ui_clear_color, self.liver_fresnel)
+            self.liver.use()
+            glCullFace(GL_FRONT)
+            glDrawArrays(GL_TRIANGLES, 0, self.liver.count_verts())
+            glCullFace(GL_BACK)
+            glDrawArrays(GL_TRIANGLES, 0, self.liver.count_verts())
+
+        if self.ui_instrument_visible:
+            self.instrument_shader.run(self.Mproj, self.Mmodel, self.ui_instrument_color, self.ui_clear_color, self.instrument_fresnel)
+            self.instrument.use()
+            glCullFace(GL_FRONT)
+            glDrawArrays(GL_TRIANGLES, 0, self.instrument.count_verts())
+            glCullFace(GL_BACK)
+            glDrawArrays(GL_TRIANGLES, 0, self.instrument.count_verts())
 
         if self.ui_display_menu:
             self.draw_user_interface()

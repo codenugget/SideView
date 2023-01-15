@@ -1,8 +1,16 @@
+from OpenGL.GL import *
+
 import numpy as np
 import ObjParse as op
 
 class TriSoup:
     def __init__(self, verts, uvs, norms, face_vtx, face_uv, face_nrm):
+        self.vao = -1
+        self.vertex_buffer_object = -1
+        self.pos_attrib = -1
+        self.uv_attrib = -1
+        self.nrm_attrib = -1
+        self.orig_vertices = verts
         self.has_uv = len(face_uv) > 0
         self.has_nrm = len(face_nrm) > 0
         if len(face_vtx) == 0:
@@ -48,12 +56,66 @@ class TriSoup:
                 self.vertex_data[i * self.num_attribs + o + 2] = val_z
                 o += 3
 
+    def calc_center(self):
+        n = int(len(self.orig_vertices) / 3)
+        x = 0
+        y = 0
+        z = 0
+        for idx in range(n):
+            x = x + self.orig_vertices[idx * 3 + 0]
+            y = y + self.orig_vertices[idx * 3 + 1]
+            z = z + self.orig_vertices[idx * 3 + 2]
+        x = x / n
+        y = y / n
+        z = z / n
+        #print([x, y, z])
+        return np.array([x, y, z])
+
     def count_verts(self):
         return int(self.num_floats / self.num_attribs)
     def count_attrib_bytes(self):
         return self.num_attribs * 4
     def count_bytes(self):
         return self.num_floats * 4
+
+    def create_geom(self, pos_attrib, uv_attrib, nrm_attrib):
+        # Create buffer object
+        self.vao = glGenVertexArrays(1)
+        glBindVertexArray(self.vao)
+        self.vertex_buffer_object = glGenBuffers(1)
+
+        # Bind the buffer and setup the attrib arrays
+        vertex_attrib_bytes = self.count_attrib_bytes()
+        num_array_bytes = self.count_bytes()
+
+        self.pos_attrib = pos_attrib
+        self.uv_attrib = uv_attrib
+        self.nrm_attrib = nrm_attrib
+
+        glBindBuffer(GL_ARRAY_BUFFER, self.vertex_buffer_object)
+        glBufferData(GL_ARRAY_BUFFER, num_array_bytes, self.vertex_data, GL_STATIC_DRAW)
+
+        glVertexAttribPointer(pos_attrib, 3, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, None)
+        glEnableVertexAttribArray(pos_attrib)
+        skip_bytes = 3 * 4
+
+        if self.has_uv:
+            glVertexAttribPointer(uv_attrib, 2, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, ctypes.c_void_p(skip_bytes))
+            glEnableVertexAttribArray(uv_attrib)
+            skip_bytes += 2 * 4
+
+        if self.has_nrm:
+            glVertexAttribPointer(nrm_attrib, 3, GL_FLOAT, GL_FALSE, vertex_attrib_bytes, ctypes.c_void_p(skip_bytes))
+            glEnableVertexAttribArray(nrm_attrib)
+            skip_bytes += 3 * 4
+
+    def use(self):
+        #print(self.vertex_buffer_object)
+        glBindVertexArray(self.vao)
+
+    def destroy(self):
+        glDeleteBuffers(1, [self.vertex_buffer_object])
+        glDeleteVertexArrays(1, [self.vao])
 
 def convert_tris(o):
     if not isinstance(o, op.ObjParse) or not o.vertices:

@@ -58,23 +58,46 @@ void main() {
 }
 """
 
+class Program:
+    def __init__(self):
+        self.program = -1
+
+        self.pos_attrib = -1
+        self.nrm_attrib = -1
+        self.uv_attrib = -1
+        self.Mproj_uform = -1
+        self.Mmodel_uform = -1
+        self.col_uform = -1
+        self.bkg_uform = -1
+        self.fresnel_uform = -1
+
+    def run(self, Mproj, Mmodel, base_color, bkg_color, fresnel):
+        glUseProgram(self.program) # This activates the shader
+        glUniformMatrix4fv(self.Mproj_uform, 1, GL_FALSE, Mproj)
+        glUniformMatrix4fv(self.Mmodel_uform, 1, GL_FALSE, Mmodel)
+        glUniform4fv(self.col_uform, 1, [base_color])
+        glUniform4fv(self.bkg_uform, 1, [bkg_color]) 
+        glUniform4fv(self.fresnel_uform, 1, [fresnel])
+
+    def destroy(self):
+        glDeleteProgram(self.program)
+
 def create():
+    ret = Program()
     # Compile The Program and shaders
-    shader = OpenGL.GL.shaders.compileProgram(OpenGL.GL.shaders.compileShader(VERTEX_SHADER,GL_VERTEX_SHADER),
-                                            OpenGL.GL.shaders.compileShader(FRAGMENT_SHADER, GL_FRAGMENT_SHADER))
-    glBindFragDataLocation(shader,0,"fragColor");
+    ret.program = OpenGL.GL.shaders.compileProgram(
+        OpenGL.GL.shaders.compileShader(VERTEX_SHADER,GL_VERTEX_SHADER),
+        OpenGL.GL.shaders.compileShader(FRAGMENT_SHADER, GL_FRAGMENT_SHADER))
+    #glBindFragDataLocation(ret.program,0,"fragColor");
 
-    position = glGetAttribLocation(shader, 'position')
-    uv = glGetAttribLocation(shader, 'uv')
-    nrm = glGetAttribLocation(shader, 'normal')
-    proj = glGetUniformLocation(shader, 'Mproj')
-    model = glGetUniformLocation(shader, 'Mmodel')
-    color = glGetUniformLocation(shader, 'color')
-    colorBack = glGetUniformLocation(shader, 'colorBack')
-    fresnel = glGetUniformLocation(shader, 'fresnel')
+    ret.pos_attrib = glGetAttribLocation(ret.program, 'position')
+    ret.uv_attrib = glGetAttribLocation(ret.program, 'uv')
+    ret.nrm_attrib = glGetAttribLocation(ret.program, 'normal')
+    ret.Mproj_uform = glGetUniformLocation(ret.program, 'Mproj')
+    ret.Mmodel_uform = glGetUniformLocation(ret.program, 'Mmodel')
+    ret.col_uform = glGetUniformLocation(ret.program, 'color')
+    ret.bkg_uform = glGetUniformLocation(ret.program, 'colorBack')
+    ret.fresnel_uform = glGetUniformLocation(ret.program, 'fresnel')
 
-    return shader, position, uv, nrm, proj, model, color, colorBack, fresnel
-create.__doc__ = """Creates a very simple color shader using glsl. Returns:
-  ShaderProgram,
-  PosAttrib, UVAttrib, NrmAttrib,
-  ProjUform, ModelUform, ColUform, BkgColUform, FresnelUForm"""
+    return ret
+create.__doc__ = "Creates a very simple color shader using glsl. Returns: color_shader.Param that contains the program, attrib, and uniform locations"
